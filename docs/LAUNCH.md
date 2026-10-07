@@ -59,15 +59,25 @@ git add -A && git commit -m "Mainnet deployment" && git push
 
 1. vercel.com > Add New > Project > import `patrick734/stocksage`, Root Directory `app`.
 2. Storage (or Marketplace) > Upstash > Redis > create and connect it to the project. It adds the Redis variables.
-3. Settings > Environment Variables, add:
-   - `ANTHROPIC_API_KEY`: from console.anthropic.com > API keys
-   - `AGENT_MODEL`: the Claude model the agents run on
+3. Pick the AI that runs the agents. **Free option (no card):** create a free API key with one provider:
+   - Google Gemini: aistudio.google.com > Get API key. Base URL `https://generativelanguage.googleapis.com/v1beta/openai`
+   - Groq: console.groq.com > API Keys. Base URL `https://api.groq.com/openai/v1`
+   - OpenRouter: openrouter.ai > Keys. Base URL `https://openrouter.ai/api/v1` (free models end in `:free`)
+
+   Copy a model name from that provider's model list. Free tiers have daily limits; check them when you sign up.
+4. Settings > Environment Variables, add:
+   - `LLM_BASE_URL`: the base URL above
+   - `LLM_API_KEY`: your key from that provider
+   - `AGENT_MODEL`: the model name
    - `SESSION_SECRET`: output of `openssl rand -hex 32`
    - `NEXT_PUBLIC_SITE_URL`: `https://stocksage.fun` (your domain)
    - `NEXT_PUBLIC_X_URL`: your X profile link
-4. Deploy, then Settings > Domains > add your domain.
 
-Every reply costs API credit. Set a monthly spend limit in the Anthropic console, and keep an eye on usage.
+   To use Claude instead (paid, adds web search): leave `LLM_BASE_URL` empty and set `ANTHROPIC_API_KEY`.
+5. Deploy, then Settings > Domains > add your domain.
+
+With a free provider, keep the free daily caps modest (`FREE_GLOBAL_PER_DAY`, default 500) so busy days don't hit the
+provider's limit. When a provider is rate-limited, the reply fails and the user's use is not charged.
 
 ## 4. Launch $SAGE on Pons
 

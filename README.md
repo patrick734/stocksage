@@ -47,8 +47,9 @@ The app's API routes run the agents:
 - **Metering:** one reply is one use. Paid agents: uses bought on-chain minus uses served. Agents priced below
   `MIN_PAID_PRICE_WEI` (Sage among them) use a free daily quota per wallet and overall. A reply that fails or is
   declined before any text is not charged.
-- **Agents** run on Claude through the Anthropic API, with optional web search, under StockSage's rules (information,
-  not investment advice; never asks for keys).
+- **Agents** run on any OpenAI-compatible provider (Gemini, Groq, OpenRouter and others, several with free tiers) or on
+  Claude through the Anthropic API with web search, chosen in the environment. StockSage's rules come first in every
+  prompt (information, not investment advice; never asks for keys).
 - **Storage:** Upstash Redis for configs, nonces and use counters.
 
 ## Launch

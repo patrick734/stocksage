@@ -1,12 +1,15 @@
-// End-to-end check against a local chain and a running app (see app/README.md):
-// sign in, free chat, paid chat after buying uses on-chain, refund on a declined reply, create an agent.
+// End-to-end check against a local chain and a running app (see README.md):
+// sign in, free chat, paid chat after buying uses on-chain, refund on a failed reply, create an agent.
 //   node scripts/e2e-local.mjs http://localhost:3100
+// With PROVIDER=openai it expects the app to run against an OpenAI-compatible stand-in instead of the Claude one.
 import { readFileSync } from "node:fs";
 import { createPublicClient, createWalletClient, erc20Abi, http, parseEther, parseEventLogs } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { hardhat } from "viem/chains";
 
 const BASE = process.argv[2] || "http://localhost:3100";
+const OPENAI = process.env.PROVIDER === "openai";
+const REPLY = OPENAI ? "Hello from the free model." : "Hello from the mock.";
 const d = JSON.parse(readFileSync(new URL("../../contracts/deployments/localhost.json", import.meta.url)));
 const reg = JSON.parse(readFileSync(new URL("../../abis/AgentRegistry.json", import.meta.url)));
 const mkt = JSON.parse(readFileSync(new URL("../../abis/AgentMarket.json", import.meta.url)));
@@ -54,7 +57,7 @@ check((await jsonCall("/api/auth", { method: "POST", body: { address: account.ad
 check((await jsonCall("/api/auth", { method: "POST", body: { address: account.address, nonce: n.nonce, signature } })).status === 401, "a used or replaced nonce is refused");
 
 const free = await chat(1, "What is a tokenized stock?");
-check(free.reply === "Hello from the mock." && free.refunded === false && free.remaining === 9, `free chat streams (${JSON.stringify(free.reply)}), ${free.remaining} free left`);
+check(free.reply === REPLY && free.refunded === false && free.remaining === 9, `free chat streams (${JSON.stringify(free.reply)}), ${free.remaining} free left`);
 
 const unpaid = await chat(2, "Analyse NVDA");
 check(unpaid.status === 402, `paid agent without uses: ${unpaid.status} ${unpaid.error}`);
@@ -68,8 +71,8 @@ check(me.quotas["2"].purchased === 3 && me.quotas["2"].remaining === 3, "/api/me
 
 const paid = await chat(2, "Analyse NVDA");
 check(paid.reply && paid.remaining === 2, `paid chat works, ${paid.remaining} uses left`);
-const refused = await chat(2, "REFUSE this");
-check(refused.refunded === true && refused.remaining === 2 && /not charged/.test(refused.notice), `declined reply refunded: "${refused.notice}"`);
+const refused = await chat(2, OPENAI ? "BUSY now" : "REFUSE this");
+check(refused.refunded === true && refused.remaining === 2 && /not charged/.test(refused.notice), `failed reply refunded: "${refused.notice}"`);
 check((await jsonCall("/api/me")).body.quotas["2"].used === 1, "only the answered reply counted as used");
 
 const bad = await jsonCall("/api/configs", { method: "POST", body: { config: { name: "", description: "x" } } });
@@ -94,8 +97,14 @@ check(act.items.some((i) => i.kind === "deployed" && i.agentId === 6) && act.ite
 const safety = (await jsonCall("/api/safety")).body;
 check(safety.checks.length === 7 && safety.checks.every((c) => c.ok), `safety: ${safety.checks.filter((c) => c.ok).length}/${safety.checks.length} checks pass`);
 const log = readFileSync(process.env.MOCK_LOG, "utf8").trim().split("\n").map((l) => JSON.parse(l));
-const first = log[0];
-check(first.model === "test-model" && first.output_config?.effort === "low" && first.fallbacks === "default", "request uses AGENT_MODEL, low effort, server-side fallbacks");
-check(first.tools?.[0]?.type === "web_search_20260209" && first.system.includes("never personal investment advice"), "web search tool and StockSage rules sent");
+if (OPENAI) {
+  const first = log[0];
+  check(first.path === "/v1/chat/completions" && first.auth === "Bearer test-key" && first.body.model === "test-model" && first.body.stream === true, "OpenAI-compatible request: path, key, model, streaming");
+  check(first.body.messages[0].role === "system" && first.body.messages[0].content.includes("no live web access"), "system prompt says there is no live web access");
+} else {
+  const first = log[0];
+  check(first.model === "test-model" && first.output_config?.effort === "low" && first.fallbacks === "default", "request uses AGENT_MODEL, low effort, server-side fallbacks");
+  check(first.tools?.[0]?.type === "web_search_20260209" && first.system.includes("never personal investment advice"), "web search tool and StockSage rules sent");
+}
 console.log(failed ? `\n${failed} check(s) failed` : "\nAll end-to-end checks passed.");
 process.exit(failed ? 1 : 0);

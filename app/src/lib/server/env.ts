@@ -15,6 +15,16 @@ export const settings = {
   rpcUrl: () => process.env.ROBINHOOD_RPC_URL || process.env.NEXT_PUBLIC_ROBINHOOD_RPC_URL || "https://rpc.mainnet.chain.robinhood.com",
   siteUrl: () => process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000",
   sessionSecret: () => (isProd ? need("SESSION_SECRET") : process.env.SESSION_SECRET || "dev-only-session-secret"),
+  /**
+   * Which AI provider runs the agents: "anthropic" (Claude, needs ANTHROPIC_API_KEY) or "openai" (any OpenAI-compatible
+   * API such as Gemini, Groq or OpenRouter, several with free tiers; needs LLM_BASE_URL and LLM_API_KEY). Defaults to
+   * "openai" when LLM_BASE_URL is set, else "anthropic".
+   */
+  llmProvider: (): "anthropic" | "openai" => {
+    const p = (process.env.LLM_PROVIDER || "").toLowerCase();
+    if (p === "anthropic" || p === "openai") return p;
+    return process.env.LLM_BASE_URL ? "openai" : "anthropic";
+  },
   /** Model for every agent, e.g. set in Vercel. Read from the environment so it can change without a deploy. */
   agentModel: () => need("AGENT_MODEL"),
   agentEffort: () => (process.env.AGENT_EFFORT || "low") as "low" | "medium" | "high",

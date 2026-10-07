@@ -1,7 +1,6 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { agentById } from "@/lib/server/chain";
 import { loadConfig } from "@/lib/server/configs";
-import { settings } from "@/lib/server/env";
+import { assertConfigured, hasWebSearch, streamReply, type Turn } from "@/lib/server/llm";
 import { systemPrompt } from "@/lib/server/prompt";
 import { sessionAddress } from "@/lib/server/session";
 import { reserve } from "@/lib/server/usage";
@@ -17,9 +16,6 @@ export const maxDuration = 120;
 const MAX_TURNS = 24;
 const MAX_CHARS = 8_000;
 const MAX_TOTAL = 48_000;
-const MAX_PAUSES = 3;
-
-type Turn = { role: "user" | "assistant"; content: string };
 
 function parseTurns(raw: unknown): Turn[] | string {
   if (!Array.isArray(raw) || raw.length === 0) return "Send at least one message.";
@@ -40,8 +36,6 @@ function parseTurns(raw: unknown): Turn[] | string {
   return turns;
 }
 
-let anthropic: Anthropic | null = null;
-
 export const POST = route(async (req: Request) => {
   const user = sessionAddress();
   if (!user) return fail("Sign in with your wallet first.", 401);
@@ -55,58 +49,22 @@ export const POST = route(async (req: Request) => {
   const config = await loadConfig(agent.configHash);
   if (!config) return fail("This agent's configuration is missing, so it can't run.", 500);
 
-  const model = settings.agentModel();
+  assertConfigured(); // before taking a use
   const reservation = await reserve(user, agent);
   if (!reservation.ok) return fail(reservation.error, reservation.status);
 
-  anthropic ??= new Anthropic();
-  const client = anthropic;
+  const webSearch = config.webSearch && hasWebSearch();
   const enc = new TextEncoder();
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       let wrote = false;
-      let notice: string | undefined;
-      const write = (s: string) => {
-        if (!s) return;
+      const write = (text: string) => {
+        if (!text) return;
         wrote = true;
-        controller.enqueue(enc.encode(s));
+        controller.enqueue(enc.encode(text));
       };
-      const messages: Anthropic.Beta.BetaMessageParam[] = turns.map((t) => ({ role: t.role, content: t.content }));
-      try {
-        for (let pass = 0; pass <= MAX_PAUSES; pass++) {
-          const s = client.beta.messages.stream(
-            {
-              model,
-              max_tokens: settings.maxReplyTokens(),
-              system: systemPrompt(config),
-              cache_control: { type: "ephemeral" },
-              messages,
-              output_config: { effort: settings.agentEffort() },
-              ...(config.webSearch ? { tools: [{ type: "web_search_20260209" as const, name: "web_search" as const, max_uses: settings.webSearchMaxUses() }] } : {}),
-              ...(process.env.AGENT_FALLBACKS === "off" ? {} : { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const }),
-            },
-            { signal: req.signal }
-          );
-          for await (const event of s) {
-            if (event.type === "content_block_delta" && event.delta.type === "text_delta") write(event.delta.text);
-          }
-          const final = await s.finalMessage();
-          if (final.stop_reason === "pause_turn") {
-            // A long web search paused the turn: hand the partial turn back and let it continue.
-            messages.push({ role: "assistant", content: final.content });
-            continue;
-          }
-          if (final.stop_reason === "refusal") notice = "The agent declined this request.";
-          else if (final.stop_reason === "max_tokens") notice = "The reply hit its length limit.";
-          break;
-        }
-      } catch (e) {
-        if (!(e instanceof Anthropic.APIUserAbortError)) {
-          console.error("chat", e instanceof Anthropic.APIError ? `${e.status} ${e.message}` : e);
-          notice = e instanceof Anthropic.RateLimitError ? "The agents are busy right now. Try again in a moment." : "The agent could not finish this reply.";
-        }
-      }
+      let { notice } = await streamReply({ system: systemPrompt(config, { webSearch }), turns, webSearch, signal: req.signal, write });
       const refunded = !wrote;
       if (refunded) await reservation.release().catch((e) => console.error("refund", e));
       if (refunded && notice) notice += " Your use was not charged.";
