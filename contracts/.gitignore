@@ -1,0 +1,6 @@
+node_modules
+artifacts
+cache
+deployments/hardhat.json
+deployments/localhost.json
+deployments/fork.json

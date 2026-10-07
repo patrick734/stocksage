@@ -1,0 +1,14 @@
+{
+  "name": "@stocksage/keeper",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Keeps the StockSage $SAGE price current: reads the Pons pool, pushes a bounded update to TokenOracle.",
+  "scripts": {
+    "start": "node src/run.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "viem": "^2.21.0"
+  }
+}

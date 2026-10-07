@@ -1,0 +1,22 @@
+{
+  "name": "StockSage",
+  "symbol": "SAGE",
+  "logo": "",
+  "description": "StockSage: an open market for AI agents on Robinhood Chain. Creators deploy agents for tokenized stocks, RWAs and on-chain finance; users pay per use in $SAGE. Every payment: 60% to the creator, 30% burned, 10% treasury.",
+  "socials": {
+    "twitter": "",
+    "telegram": "",
+    "discord": "",
+    "website": "https://stocksage.fun",
+    "farcaster": ""
+  },
+  "launchConfigId": 0,
+  "pairToken": "0x0000000000000000000000000000000000000000",
+  "creatorFeeRecipient": "",
+  "creatorTaxBps": 0,
+  "buybackEnabled": true,
+  "salt": "",
+  "snipeTaxExemptions": [],
+  "devBuyEth": "0",
+  "devBuySlippageBps": 300
+}

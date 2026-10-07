@@ -1,0 +1,40 @@
+# Keeps the $SAGE price in TokenOracle current, every 15 minutes. Without fresh prices, sales stop after 24h.
+# Repo settings (Settings > Secrets and variables > Actions):
+#   secret   KEEPER_PRIVATE_KEY   set by: node tools/wallet.js keeper-secret
+#   secret   ROBINHOOD_RPC_URL    optional private RPC
+#   variable KEEPER_LIVE          0 = dry run (log only), 1 = send transactions
+name: Keeper
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: keeper
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install keeper
+        working-directory: keeper
+        run: npm ci --no-audit --no-fund
+      - name: Run one keeper cycle
+        working-directory: keeper
+        env:
+          KEEPER_PRIVATE_KEY: ${{ secrets.KEEPER_PRIVATE_KEY }}
+          RPC_URL: ${{ secrets.ROBINHOOD_RPC_URL || 'https://rpc.mainnet.chain.robinhood.com' }}
+          KEEPER_LIVE: ${{ vars.KEEPER_LIVE }}
+        run: node src/run.mjs

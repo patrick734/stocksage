@@ -1,0 +1,53 @@
+{
+  "network": {
+    "name": "Robinhood Chain",
+    "chainId": 4663,
+    "rpcUrl": "https://rpc.mainnet.chain.robinhood.com",
+    "explorer": "https://robinhoodchain.blockscout.com"
+  },
+  "uniswap": {
+    "poolManager": "0x8366a39CC670B4001A1121B8F6A443A643e40951"
+  },
+  "pons": {
+    "hook": "0xE5e702641Ea86F4ae6cC3cDaeD2B886f976Be044",
+    "poolFee": 0,
+    "poolTickSpacing": 200,
+    "launchpad": "https://ponsfamily.com/launchpad"
+  },
+  "repo": "patrick734/stocksage",
+  "protocol": {
+    "timelockDelaySeconds": 172800,
+    "deploymentFeeEth": "0.001",
+    "oracle": {
+      "minIntervalSeconds": 600,
+      "maxStepBps": 1000,
+      "maxAgeSeconds": 86400
+    },
+    "seeds": [
+      {
+        "file": "agents/1-sage.json",
+        "pricePerUseEth": "0"
+      },
+      {
+        "file": "agents/2-stock-desk.json",
+        "pricePerUseEth": "0.0001"
+      },
+      {
+        "file": "agents/3-rwa-scout.json",
+        "pricePerUseEth": "0.0001"
+      },
+      {
+        "file": "agents/4-flow-watch.json",
+        "pricePerUseEth": "0.00005"
+      },
+      {
+        "file": "agents/5-headline.json",
+        "pricePerUseEth": "0.00005"
+      }
+    ]
+  },
+  "brand": {
+    "name": "StockSage",
+    "ticker": "SAGE"
+  }
+}
