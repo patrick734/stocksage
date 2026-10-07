@@ -16,4 +16,23 @@ export type Deployment = {
   deployBlock: number;
 };
 
-export const deployments: Record<number, Deployment> = {};
+export const deployments: Record<number, Deployment> = {
+  "4663": {
+    "network": "robinhood",
+    "chainId": 4663,
+    "deployer": "0x3442b1381775aB3B5742f9fE4BDC256fb8dA97f1",
+    "roles": {
+      "admin": "0x28Cce57331804306d5952D36c3103C361a145812",
+      "guardian": "0x39c48cB3617d9eF53c4d2A7Eae78cBF79a08EcA1",
+      "keeper": "0xDf235771cB639ebdb1BE5358bfF2e70Fb4bc9Db8"
+    },
+    "startBlock": 82693399,
+    "timelock": "0x97efc51A91B9A304400031812AD6623c2274794E",
+    "treasury": "0x97efc51A91B9A304400031812AD6623c2274794E",
+    "oracle": "0xbd23909Ffd57cCF6dCBc57d7b9866503b0A9ED78",
+    "registry": "0x1e3A9766A6A20990A78A557C0e40d2Ed4EEd0fD5",
+    "market": "0x3DE314f67A9Cb86A0DB2358ee382Cc579C73bD94",
+    "token": null,
+    "deployBlock": 82693399
+  }
+};
