@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AgentAvatar, PriceLabel } from "@/components/AgentCard";
 import { BuyUses } from "@/components/BuyUses";
 import { Chat } from "@/components/Chat";
@@ -18,7 +18,16 @@ export default function AgentPage({ params }: { params: { id: string } }) {
   const session = useSession();
   const quotas = useQuotas(session.signedIn);
 
-  if (isLoading) return <div className="wrap page"><div className="card skeleton tall" /></div>;
+  // A freshly deployed agent can take a few seconds to appear in the list: keep looking for up to 30 seconds.
+  const [waited, setWaited] = useState(0);
+  const pending = !agent && Boolean(market) && waited < 15;
+  useEffect(() => {
+    if (!pending) return;
+    const t = setTimeout(() => (refetch(), setWaited((w) => w + 1)), 2000);
+    return () => clearTimeout(t);
+  }, [pending, waited, refetch]);
+
+  if (isLoading || pending) return <div className="wrap page"><div className="card skeleton tall" /></div>;
   if (!agent || !market) return <div className="wrap page"><h1>Agent not found</h1><Link href="/marketplace">Back to the marketplace</Link></div>;
   const c = agent.config;
 

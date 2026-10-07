@@ -62,9 +62,9 @@ export type Snapshot = {
 
 let cache: { at: number; snap: Snapshot } | null = null;
 
-/** Every agent with its sales, read from the chain (cached for 15 seconds). Before deployment: the seed agents. */
+/** Every agent with its sales, read from the chain (cached for 5 seconds). Before deployment: the seed agents. */
 export async function snapshot(): Promise<Snapshot> {
-  if (cache && Date.now() - cache.at < 15_000) return cache.snap;
+  if (cache && Date.now() - cache.at < 5_000) return cache.snap;
   const d = deployment();
   const snap = d ? await readChain(d) : preview();
   cache = { at: Date.now(), snap };
