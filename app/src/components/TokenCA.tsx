@@ -25,6 +25,9 @@ export function TokenCA({ address }: { address: string | null }) {
       <a className="btn btn-sm" href={`${robinhoodChain.blockExplorers.default.url}/token/${address}`} target="_blank" rel="noreferrer">
         Explorer ↗
       </a>
+      <a className="btn btn-sm btn-primary" href={`https://ponsfamily.com/launchpad/${address}`} target="_blank" rel="noreferrer">
+        Buy on Pons ↗
+      </a>
     </p>
   );
 }

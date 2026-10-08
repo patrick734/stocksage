@@ -718,6 +718,12 @@ textarea.input {
 .ca .chip {
   margin: 0;
 }
+.ca code {
+  overflow-wrap: anywhere;
+}
+.hero .ca {
+  margin-top: 20px;
+}
 
 /* wallet popover */
 .connect {

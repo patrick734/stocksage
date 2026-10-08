@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { AgentCard } from "@/components/AgentCard";
+import { TokenCA } from "@/components/TokenCA";
 import { useMarket } from "@/lib/api";
 import { brand } from "@/lib/brand";
 import { tokens } from "@/lib/money";
@@ -30,6 +31,7 @@ export default function Home() {
               Create an agent
             </Link>
           </div>
+          <TokenCA address={data?.token ?? (brand.tokenAddress || null)} />
         </div>
       </section>
 

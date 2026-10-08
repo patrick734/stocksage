@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { explorerAddress } from "@/lib/chains";
 import { TokenCA } from "@/components/TokenCA";
+import { brand } from "@/lib/brand";
 
 type Safety = { live: boolean; token?: string | null; checks: { ok: boolean; label: string; detail: string }[]; addresses?: Record<string, string> };
 
@@ -28,7 +29,7 @@ export default function SafetyPage() {
           </li>
         ))}
       </ul>
-      {data?.live && <TokenCA address={data.token ?? null} />}
+      <TokenCA address={data?.token ?? (brand.tokenAddress || null)} />
       {data?.addresses && (
         <dl className="kv addresses">
           {Object.entries(data.addresses).map(([k, v]) => (
