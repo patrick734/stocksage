@@ -4,9 +4,17 @@ import { useEffect, useRef, useState } from "react";
 import { useAccount } from "wagmi";
 import { useQueryClient } from "@tanstack/react-query";
 import { useQuotas, useSession, type Agent, type Quota } from "@/lib/api";
+import { AgentAvatar } from "./AgentCard";
 import { Markdown } from "./Markdown";
 
 type Turn = { role: "user" | "assistant"; content: string };
+
+const STARTERS: Record<string, string[]> = {
+  RWA: ["Which tokenized treasuries can I hold?", "Compare two tokenized funds", "What backs a tokenized stock?"],
+  "On-chain": ["Explain the biggest move today", "Who is buying this token?", "Read this wallet's activity"],
+  News: ["What moved the market today?", "Any headlines on NVDA?", "Summarise this week in 5 lines"],
+};
+const DEFAULT_STARTERS = ["Why did NVDA move today?", "Is the tokenized AAPL price in line?", "Explain tokenized stocks simply"];
 
 const key = (id: number) => `chat:${id}`;
 function loadChat(id: number): Turn[] {
@@ -111,7 +119,19 @@ export function Chat({ agent }: { agent: Agent }) {
         )}
       </div>
       <div className="chat-log" aria-live="polite" ref={log}>
-        {turns.length === 0 && <p className="muted">{agent.config?.description}</p>}
+        {turns.length === 0 && (
+          <div className="chat-empty">
+            <AgentAvatar agent={agent} size={56} />
+            <p>{agent.config?.description}</p>
+            <div className="starters">
+              {(STARTERS[agent.config?.category ?? ""] ?? DEFAULT_STARTERS).map((q) => (
+                <button key={q} type="button" disabled={Boolean(gate) || !session.signedIn} onClick={() => setDraft(q)}>
+                  {q}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {turns.map((t, i) => (
           <div key={i} className={`bubble ${t.role}`}>
             {t.role === "assistant" ? t.content ? <Markdown text={t.content} /> : <span className="typing">Thinking…</span> : t.content}

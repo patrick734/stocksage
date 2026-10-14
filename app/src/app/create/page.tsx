@@ -104,7 +104,7 @@ export default function CreateAgent() {
             <input type="checkbox" checked={cfg.webSearch} onChange={(e) => set("webSearch", e.target.checked)} />
             <span>Let the agent search the web for current information</span>
           </label>
-          <Field label="Price per use (ETH)" hint="Paid in $SAGE at the live price. You can change it later.">
+          <Field label="Price per use (ETH)" hint="Paid in $SAGE at the oracle rate. You can change it later.">
             <input className="input" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value.replace(",", "."))} />
           </Field>
           {needsSignIn ? (

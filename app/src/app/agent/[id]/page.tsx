@@ -72,7 +72,7 @@ export default function AgentPage({ params }: { params: { id: string } }) {
             {tokens(agent.burned)} {brand.token}
           </dd>
           <dt>Creator</dt>
-          <dd>{agent.creator ? <a href={explorerAddress(agent.creator)} target="_blank" rel="noreferrer">{agent.seed ? "StockSage treasury" : shortAddress(agent.creator)} ↗</a> : "StockSage"}</dd>
+          <dd>{agent.creator ? <a href={explorerAddress(agent.creator)} target="_blank" rel="noreferrer">{agent.seed ? "StockSage" : shortAddress(agent.creator)} ↗</a> : "StockSage"}</dd>
           <dt>Version</dt>
           <dd>v{agent.version}</dd>
         </dl>
