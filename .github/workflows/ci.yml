@@ -33,24 +33,6 @@ jobs:
       - name: Local deploy passes on-chain verification
         run: npx hardhat run scripts/deploy.js
 
-  keeper:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    defaults:
-      run:
-        working-directory: keeper
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: keeper/package-lock.json
-      - run: npm ci
-      - run: npm test
-
   launch:
     runs-on: ubuntu-latest
     timeout-minutes: 10

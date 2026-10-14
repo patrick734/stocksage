@@ -1,13 +1,10 @@
-// Offline compiler: set SOLCJS_PATH to a soljson.js (solc npm package) when
-// binaries.soliditylang.org is unreachable. CI leaves it unset and downloads solc normally.
+// Offline compiler: LOCAL_SOLC=/path/to/solc-0.8.28 (native) or SOLCJS_PATH=/path/to/soljson.js uses a local
+// compiler when binaries.soliditylang.org is unreachable. Unset, Hardhat downloads solc normally.
 const { subtask } = require("hardhat/config");
 const { TASK_COMPILE_SOLIDITY_GET_SOLC_BUILD } = require("hardhat/builtin-tasks/task-names");
 
-if (process.env.SOLCJS_PATH) {
-  subtask(TASK_COMPILE_SOLIDITY_GET_SOLC_BUILD, async ({ solcVersion }, _hre, runSuper) => {
-    const solc = require(require("path").join(require("path").dirname(process.env.SOLCJS_PATH), "index.js"));
-    const longVersion = solc.version().replace(/\.Emscripten.*$/, "");
-    if (!longVersion.startsWith(solcVersion)) return runSuper();
-    return { compilerPath: process.env.SOLCJS_PATH, isSolcJs: true, version: solcVersion, longVersion };
-  });
-}
+subtask(TASK_COMPILE_SOLIDITY_GET_SOLC_BUILD, async (args, _hre, runSuper) => {
+  if (process.env.LOCAL_SOLC && args.solcVersion === "0.8.28")
+    return { compilerPath: process.env.LOCAL_SOLC, isSolcJs: false, version: args.solcVersion, longVersion: "0.8.28+commit.7893614a" };
+  return runSuper();
+});

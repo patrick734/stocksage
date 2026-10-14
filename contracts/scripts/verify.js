@@ -1,174 +1,154 @@
-// Checks an stocksage deployment on-chain. Read-only, needs no key, and anyone can run it:
-//   npx hardhat run scripts/verify.js --network robinhood        (reads deployments/robinhood.json)
-// Exits 1 if any check fails. deploy.js runs the same checks right after deploying.
+// Publishes the source of every StockSage contract on Sourcify (sourcify.dev), which the Robinhood Chain explorer
+// reads, so anyone can read the code. Then checks the deployment on-chain. Read-only: no key, no gas.
+//   npx hardhat run scripts/verify.js --network robinhood        (or ../verify.sh)
+// Anything Sourcify cannot take gets a browser upload file in ../verify-files/.
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
 const agents = require("../lib/agents");
 
-const MIN_DELAY = 48n * 3600n;
+const SOURCIFY = (process.env.VERIFY_SOURCIFY_URL || "https://sourcify.dev/server").replace(/\/$/, "");
+const FILE = process.env.VERIFY_DEPLOYMENT || path.join(__dirname, "..", "deployments", "robinhood.json");
+const MANUAL = path.join(__dirname, "..", "..", "verify-files");
+const SOLC = "0.8.28+commit.7893614a";
+const CHAIN = 4663;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/**
- * Role events for several contracts in one sweep. Free RPC plans cap eth_getLogs ranges (Alchemy free: 10
- * blocks), so: one request on the given RPC, then one on the public Robinhood RPC, then 10-block chunks.
- */
-async function roleLogs(ethers, addresses, fromBlock) {
-  const iface = new ethers.Interface([
-    "event RoleGranted(bytes32 indexed role, address indexed account, address indexed sender)",
-    "event RoleRevoked(bytes32 indexed role, address indexed account, address indexed sender)",
-  ]);
-  const topics = [[iface.getEvent("RoleGranted").topicHash, iface.getEvent("RoleRevoked").topicHash]];
-  const toBlock = await ethers.provider.getBlockNumber();
-  const filter = (from, to) => ({ address: addresses, topics, fromBlock: from, toBlock: to });
-  const parse = (logs) => logs.map((l) => ({ address: l.address.toLowerCase(), ...iface.parseLog(l) }));
+async function sjson(res) {
+  const t = await res.text();
   try {
-    return parse(await ethers.provider.getLogs(filter(fromBlock, toBlock)));
-  } catch {}
-  const config = require("../config/robinhood.json");
-  if (config.network.chainId === Number((await ethers.provider.getNetwork()).chainId)) {
-    const pub = new ethers.JsonRpcProvider(config.network.rpcUrl, config.network.chainId, { staticNetwork: true });
-    for (let i = 0; i < 2; i++) {
-      try {
-        return parse(await pub.getLogs(filter(fromBlock, toBlock)));
-      } catch {}
-    }
+    return JSON.parse(t);
+  } catch {
+    return { _raw: t.slice(0, 120) };
   }
-  const out = [];
-  for (let from = fromBlock; from <= toBlock; from += 10) {
-    const to = Math.min(from + 9, toBlock);
-    for (let tries = 0; ; tries++) {
-      try {
-        out.push(...(await ethers.provider.getLogs(filter(from, to))));
-        break;
-      } catch (e) {
-        if (tries >= 3) throw e;
-        await new Promise((r) => setTimeout(r, 500 * (tries + 1)));
-      }
-    }
-  }
-  return parse(out);
 }
 
-async function verifyDeployment(ethers, d, { requireMultisigs = false } = {}) {
+async function match(address) {
+  const res = await fetch(`${SOURCIFY}/v2/contract/${CHAIN}/${address}`, { headers: { accept: "application/json" } });
+  if (res.status === 404) return null;
+  const j = await sjson(res);
+  return res.ok ? j.match || null : null;
+}
+
+async function submit(c) {
+  const res = await fetch(`${SOURCIFY}/v2/verify/${CHAIN}/${c.address}`, {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json" },
+    body: JSON.stringify({ stdJsonInput: c.input, compilerVersion: SOLC, contractIdentifier: c.fqn }),
+  });
+  const j = await sjson(res);
+  if (res.status === 409 || j.customCode === "already_verified") return "already verified";
+  if (!res.ok || !j.verificationId) throw new Error(j.message || j._raw || `Sourcify ${res.status}`);
+  for (let i = 0; i < 60; i++) {
+    await sleep(3000);
+    const s = await sjson(await fetch(`${SOURCIFY}/v2/verify/${j.verificationId}`, { headers: { accept: "application/json" } }));
+    if (!s.isJobCompleted) continue;
+    if (s.error) throw new Error(s.error.message || s.error.customCode || "verification failed");
+    const m = s.contract && (s.contract.match || s.contract.runtimeMatch || s.contract.creationMatch);
+    if (m) return m === "exact_match" ? "verified (exact match)" : "verified";
+    throw new Error("no match");
+  }
+  throw new Error("still in Sourcify's queue; run again in a few minutes");
+}
+
+async function input(name) {
+  const hre = require("hardhat");
+  const a = await hre.artifacts.readArtifact(name);
+  const fqn = `${a.sourceName}:${a.contractName}`;
+  const bi = await hre.artifacts.getBuildInfo(fqn);
+  const meta = JSON.parse(bi.output.contracts[a.sourceName][a.contractName].metadata);
+  const sources = Object.fromEntries(Object.keys(meta.sources).map((k) => [k, bi.input.sources[k]]));
+  return { fqn, input: { language: "Solidity", sources, settings: bi.input.settings } };
+}
+
+/** On-chain checks: ownership, wiring, money flows and the seed agents. Returns the number of failures. */
+async function checkDeployment(ethers, d) {
   let failures = 0;
   const check = (ok, msg) => {
     console.log(`  ${ok ? "ok  " : "FAIL"}  ${msg}`);
     if (!ok) failures++;
   };
   const same = (a, b) => String(a).toLowerCase() === String(b).toLowerCase();
-  const fromBlock = d.startBlock ?? 0;
-
-  console.log("Timelock (admin and treasury)");
-  const tl = await ethers.getContractAt("TimelockController", d.timelock);
-  const artifact = await require("hardhat").artifacts.readArtifact("TimelockController");
-  const code = await ethers.provider.getCode(d.timelock);
-  check(ethers.keccak256(code) === ethers.keccak256(artifact.deployedBytecode), "bytecode is the unmodified OpenZeppelin TimelockController");
-  const delay = await tl.getMinDelay();
-  check(delay >= MIN_DELAY, `minimum delay ${delay / 3600n}h (at least 48h)`);
-  const R = { admin: await tl.DEFAULT_ADMIN_ROLE(), proposer: await tl.PROPOSER_ROLE(), executor: await tl.EXECUTOR_ROLE(), canceller: await tl.CANCELLER_ROLE() };
-  for (const [name, role] of Object.entries(R)) {
-    check(!(await tl.hasRole(role, d.deployer)), `deployer is not a timelock ${name}`);
-  }
-  check(await tl.hasRole(R.proposer, d.roles.admin), "admin can propose");
-  check(!(await tl.hasRole(R.admin, d.roles.admin)), "admin cannot bypass the timelock's own role management");
-
-  const accessControlled = [
-    ["TokenOracle", d.oracle, ["admin", "guardian", "keeper"]],
-    ["AgentRegistry", d.registry, ["admin", "guardian"]],
-    ["AgentMarket", d.market, ["admin", "guardian"]],
-  ];
-  const logs = await roleLogs(ethers, [d.timelock, ...accessControlled.map(([, a]) => a)], fromBlock);
-  const tlGrants = logs.filter((l) => l.address === d.timelock.toLowerCase() && l.name === "RoleGranted" && l.args.role === R.admin);
-  check(tlGrants.every((e) => same(e.args.account, d.timelock)), "only the timelock administers itself");
-
-  if (requireMultisigs) {
-    console.log("Multisigs");
-    for (const name of ["admin", "guardian"]) {
-      check((await ethers.provider.getCode(d.roles[name])) !== "0x", `${name} ${d.roles[name]} is a contract`);
-    }
-  }
-
-  console.log("Role holders");
-  for (const [label, address, names] of accessControlled) {
-    const c = await ethers.getContractAt("TokenOracle", address); // same AccessControl ABI
-    const roleIds = {
-      admin: [await c.DEFAULT_ADMIN_ROLE(), d.timelock],
-      guardian: [ethers.id("GUARDIAN_ROLE"), d.roles.guardian],
-      keeper: [ethers.id("KEEPER_ROLE"), d.roles.keeper],
-    };
-    const expected = Object.fromEntries(names.map((n) => roleIds[n]));
-    const holders = new Map();
-    for (const e of logs.filter((l) => l.address === address.toLowerCase())) {
-      const k = `${e.args.role}:${e.args.account.toLowerCase()}`;
-      if (e.name === "RoleGranted") holders.set(k, [e.args.role, e.args.account]);
-      else holders.delete(k);
-    }
-    const unexpected = [...holders.values()].filter(([role, account]) => !same(expected[role], account));
-    check(unexpected.length === 0 && holders.size === names.length, `${label}: exactly ${names.map((n) => (n === "admin" ? "timelock admin" : n)).join(", ")}`);
-    check(!(await c.hasRole(await c.DEFAULT_ADMIN_ROLE(), d.deployer)), `${label}: deployer has no admin role`);
-  }
-
-  console.log("Wiring");
-  const oracle = await ethers.getContractAt("TokenOracle", d.oracle);
+  const oracle = await ethers.getContractAt("SageOracle", d.oracle);
   const registry = await ethers.getContractAt("AgentRegistry", d.registry);
   const market = await ethers.getContractAt("AgentMarket", d.market);
-  check(same(await registry.oracle(), d.oracle), "registry prices with this TokenOracle");
-  check(same(await registry.treasury(), d.timelock), "treasury share goes to the timelock: it moves only by a public 48h proposal");
+
+  console.log("Owner");
+  check(same(await oracle.owner(), d.owner), `SageOracle owner is ${d.owner}`);
+  for (const [n, c] of [["AgentRegistry", registry], ["AgentMarket", market]]) {
+    check(same(await c.owner(), d.owner), `${n} owner is ${d.owner}`);
+    check((await c.pendingOwner()) === ethers.ZeroAddress, `${n} has no pending ownership transfer`);
+  }
+  console.log("Wiring");
+  for (const [n, c] of [["registry", registry], ["market", market]]) {
+    check(same(await c.oracle(), d.oracle), `${n} prices with this SageOracle`);
+    check(same(await c.treasury(), d.treasury), `${n} treasury is ${d.treasury}`);
+    const sage = await c.sage();
+    check(d.token ? same(sage, d.token) : true, `${n} $SAGE is ${sage === ethers.ZeroAddress ? "not set yet" : sage}`);
+  }
   check(same(await market.registry(), d.registry), "market sells the agents of this registry");
-
-  console.log("Money flows (fixed in code)");
-  const [c, b, t] = await Promise.all([market.CREATOR_BPS(), market.BURN_BPS(), market.TREASURY_BPS()]);
-  check(c === 6000n && b === 3000n && t === 1000n, "every payment: 60% creator, 30% burned, 10% treasury");
-  check((await registry.DEPLOY_BURN_BPS()) === 8000n, "deployment fee: 80% burned, 20% treasury");
-  const fee = await registry.deploymentFeeWei();
-  check(fee <= ethers.parseEther("1"), `deployment fee ${ethers.formatEther(fee)} ETH in $SAGE (code cap 1 ETH)`);
-  for (const [label, contract] of [["AgentMarket", market], ["AgentRegistry", registry]]) {
-    const fns = contract.interface.fragments.filter((f) => f.type === "function").map((f) => f.name);
-    check(!fns.some((n) => /withdraw|sweep|rescue|transfer/i.test(n)), `${label} has no withdraw or transfer function`);
+  check((await oracle.sagePerEth()) > 0n, `rate: 1 ETH = ${ethers.formatEther(await oracle.sagePerEth())} $SAGE`);
+  console.log("Money flows");
+  const [c, b, fb] = await Promise.all([market.creatorBps(), market.burnBps(), registry.deploymentBurnBps()]);
+  check(c + b <= 10000n, `every purchase: ${Number(c) / 100}% creator, ${Number(b) / 100}% burned, ${Number(10000n - c - b) / 100}% treasury`);
+  check(fb <= 10000n, `every deployment fee (${ethers.formatEther(await registry.deploymentFeeWei())} ETH in $SAGE): ${Number(fb) / 100}% burned, ${Number(10000n - fb) / 100}% treasury`);
+  check(same(await market.BURN_ADDRESS(), "0x000000000000000000000000000000000000dEaD"), "burns go to 0x…dEaD");
+  for (const [n, ct] of [["registry", registry], ["market", market]]) {
+    const names = ct.interface.fragments.filter((f) => f.type === "function").map((f) => f.name);
+    check(!names.some((x) => /withdraw|sweep|rescue|drain/i.test(x)), `${n} has no withdraw function`);
   }
-
-  console.log("Oracle");
-  const [minInterval, maxStep, maxAge] = await Promise.all([oracle.minInterval(), oracle.maxStepBps(), oracle.maxAge()]);
-  check(maxStep <= 5000n && minInterval >= 60n, `keeper moves the price at most ${Number(maxStep) / 100}% every ${Number(minInterval) / 60} min; refused after ${Number(maxAge) / 3600}h without update`);
-  const price = await oracle.price();
-  if (price === 0n) console.log("  info  no price yet: set with $SAGE by ./set-token.sh after the Pons launch");
-  else console.log(`  info  1 ETH = ${ethers.formatEther(price)} $SAGE${(await oracle.isFresh()) ? "" : " (stale or frozen: sales wait for a fresh price)"}`);
-
-  console.log("Agents");
-  const expected = agents.seeds();
-  const count = await registry.agentCount();
-  check(count >= BigInt(expected.length), `${count} agents (${expected.length} seeded at deployment)`);
-  for (let i = 0; i < expected.length && i < Number(count); i++) {
+  console.log("Seed agents");
+  const seeds = agents.seeds();
+  check(Number(await registry.agentCount()) >= seeds.length, `${seeds.length} seed agents deployed`);
+  for (let i = 0; i < seeds.length; i++) {
     const a = await registry.getAgent(i + 1);
-    const s = expected[i];
-    if (a.version > 1n) console.log(`  info  #${i + 1} ${a.name}: updated by the treasury (version ${a.version})`);
-    else check(a.configHash === s.configHash && same(a.creator, d.timelock), `#${i + 1} ${a.name}: config hash matches contracts/config/${require("../config/robinhood.json").protocol.seeds[i].file}, owned by the treasury`);
+    check(a.configHash === seeds[i].configHash && a.name === seeds[i].name && same(a.creator, d.owner), `agent ${i + 1} ${seeds[i].name}: config hash matches the published config`);
   }
-
-  console.log("$SAGE");
-  const token = await registry.token();
-  if (d.token) check(same(token, d.token), `$SAGE ${d.token}`);
-  else if (same(token, ethers.ZeroAddress)) console.log("  info  $SAGE not set yet: the timelock sets it once, after the Pons launch (./set-token.sh)");
-  else console.log(`  info  $SAGE set on-chain to ${token}`);
-  check(!(await registry.paused()) && !(await market.paused()), "not paused");
-
-  console.log(failures ? `\n${failures} check(s) failed` : "\nAll checks passed: the deployer holds no power over StockSage.");
   return failures;
 }
 
 async function main() {
   const hre = require("hardhat");
-  const file = process.env.DEPLOYMENT || path.join(__dirname, "..", "deployments", `${hre.network.name}.json`);
-  const d = JSON.parse(fs.readFileSync(file, "utf8"));
-  console.log(`Verifying ${path.relative(process.cwd(), file)} on ${hre.network.name}\n`);
-  const failures = await verifyDeployment(hre.ethers, d, { requireMultisigs: hre.network.name === "robinhood" && process.env.ALLOW_PLAIN_WALLETS !== "1" });
-  if (failures) process.exitCode = 1;
+  if (!fs.existsSync(FILE)) throw new Error(`No deployment at ${FILE}`);
+  const d = JSON.parse(fs.readFileSync(FILE, "utf8"));
+  console.log("Sourcify");
+  const failed = [];
+  for (const s of d.sources || []) {
+    if (s.contract.startsWith("Mock")) continue;
+    process.stdout.write(`  ${s.contract.padEnd(14)} ${s.address}  `);
+    const c = { address: s.address, ...(await input(s.contract)) };
+    const home = os.homedir();
+    if (home.length > 3 && JSON.stringify(c.input).includes(home)) throw new Error(`compiler input for ${s.contract} contains a local path`);
+    try {
+      const m = await match(s.address);
+      console.log(m ? `already verified (${m})` : await submit(c));
+    } catch (e) {
+      console.log(`not verified: ${String(e.message).split("\n")[0].slice(0, 140)}`);
+      failed.push(c);
+    }
+  }
+  fs.rmSync(MANUAL, { recursive: true, force: true });
+  if (failed.length) {
+    fs.mkdirSync(MANUAL, { recursive: true });
+    const lines = ["Verify each contract in the browser: open the link, tab Contract, 'Verify & publish',", "Solidity (Standard JSON input), compiler v" + SOLC + ", upload the file.", ""];
+    failed.forEach((c, i) => {
+      const f = `${String(i + 1).padStart(2, "0")}-${c.fqn.split(":")[1]}.json`;
+      fs.writeFileSync(path.join(MANUAL, f), JSON.stringify(c.input));
+      lines.push(`${c.fqn.split(":")[1]}  https://robinhoodchain.blockscout.com/address/${c.address}?tab=contract  file: ${f}`);
+    });
+    fs.writeFileSync(path.join(MANUAL, "README.txt"), lines.join("\n") + "\n");
+  }
+  console.log("\nOn-chain checks");
+  const bad = await checkDeployment(hre.ethers, d);
+  console.log(`\n${failed.length ? `${failed.length} not verified yet (browser files in verify-files/). ` : "All sources published. "}${bad ? `${bad} check(s) FAILED.` : "All checks passed."}`);
+  if (failed.length || bad) process.exitCode = 1;
 }
 
 if (require.main === module) {
   main().catch((e) => {
-    console.error(e);
+    console.error(e.message || e);
     process.exit(1);
   });
 }
 
-module.exports = { verifyDeployment };
+module.exports = { checkDeployment };

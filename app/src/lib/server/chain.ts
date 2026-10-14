@@ -17,7 +17,8 @@ let client: ReturnType<typeof makeClient> | null = null;
 function makeClient() {
   return createPublicClient({
     chain: local ? localChain : robinhoodChain,
-    transport: http(local ? undefined : settings.rpcUrl(), { batch: true }),
+    // no-store: Next.js would otherwise cache these RPC POSTs in its data cache and serve stale chain state.
+    transport: http(local ? undefined : settings.rpcUrl(), { batch: true, fetchOptions: { cache: "no-store" } }),
   });
 }
 export function publicClient() {
@@ -57,7 +58,7 @@ export type Snapshot = {
   tokenPerEth: string | null;
   priceFresh: boolean;
   deploymentFeeWei: string;
-  totals: { burned: string; toTreasury: string; uses: number };
+  totals: { burned: string; uses: number };
 };
 
 let cache: { at: number; snap: Snapshot } | null = null;
@@ -101,29 +102,28 @@ function preview(): Snapshot {
     tokenPerEth: null,
     priceFresh: false,
     deploymentFeeWei: "0",
-    totals: { burned: "0", toTreasury: "0", uses: 0 },
+    totals: { burned: "0", uses: 0 },
   };
 }
 
 async function readChain(d: Deployment): Promise<Snapshot> {
   const reg = { address: d.registry, abi: registryAbi } as const;
   const mkt = { address: d.market, abi: marketAbi } as const;
-  const [count, token, fee, fresh, price, burnedM, burnedR, toTreasury] = (await readAll([
+  const [count, sageR, sageM, fee, rate, burned] = (await readAll([
       { ...reg, functionName: "agentCount" },
-      { ...reg, functionName: "token" },
+      { ...reg, functionName: "sage" },
+      { ...mkt, functionName: "sage" },
       { ...reg, functionName: "deploymentFeeWei" },
-      { address: d.oracle, abi: oracleAbi, functionName: "isFresh" },
-      { address: d.oracle, abi: oracleAbi, functionName: "price" },
+      { address: d.oracle, abi: oracleAbi, functionName: "sagePerEth" },
       { ...mkt, functionName: "totalBurned" },
-      { ...reg, functionName: "totalBurned" },
-      { ...mkt, functionName: "totalToTreasury" },
-  ])) as [bigint, Address, bigint, boolean, bigint, bigint, bigint, bigint];
+  ])) as [bigint, Address, Address, bigint, bigint, bigint];
+  // $SAGE counts as set once both contracts have it (./set-token.sh sets both).
+  const token = sageR !== zeroAddress && sageR.toLowerCase() === sageM.toLowerCase() ? sageR : null;
   const ids = Array.from({ length: Number(count) }, (_, i) => BigInt(i + 1));
   const rows = ids.length
     ? await readAll(
         ids.flatMap((id) => [
           { ...reg, functionName: "getAgent", args: [id] } as const,
-          { ...reg, functionName: "blocked", args: [id] } as const,
           { ...mkt, functionName: "agentUsesSold", args: [id] } as const,
           { ...mkt, functionName: "agentCreatorEarned", args: [id] } as const,
           { ...mkt, functionName: "agentBurned", args: [id] } as const,
@@ -131,9 +131,8 @@ async function readChain(d: Deployment): Promise<Snapshot> {
       )
     : [];
   const agents: AgentView[] = ids.map((id, i) => {
-    const [a, blocked, sold, earned, burned] = rows.slice(i * 5, i * 5 + 5) as [
+    const [a, sold, earned, burned] = rows.slice(i * 4, i * 4 + 4) as [
       { creator: Address; createdAt: bigint; version: number; active: boolean; pricePerUseWei: bigint; configHash: `0x${string}`; name: string; metadataURI: string },
-      boolean,
       bigint,
       bigint,
       bigint,
@@ -145,24 +144,24 @@ async function readChain(d: Deployment): Promise<Snapshot> {
       createdAt: Number(a.createdAt),
       version: Number(a.version),
       active: a.active,
-      blocked,
+      blocked: false,
       pricePerUseWei: a.pricePerUseWei.toString(),
       configHash: a.configHash,
       metadataURI: a.metadataURI,
       usesSold: Number(sold),
       creatorEarned: earned.toString(),
       burned: burned.toString(),
-      seed: a.creator.toLowerCase() === d.treasury.toLowerCase(),
+      seed: a.creator.toLowerCase() === d.owner.toLowerCase(),
     };
   });
   return {
     live: true,
     agents,
-    token: token === zeroAddress ? null : token,
-    tokenPerEth: price === 0n ? null : price.toString(),
-    priceFresh: fresh,
+    token,
+    tokenPerEth: rate === 0n ? null : rate.toString(),
+    priceFresh: rate > 0n,
     deploymentFeeWei: fee.toString(),
-    totals: { burned: (burnedM + burnedR).toString(), toTreasury: toTreasury.toString(), uses: agents.reduce((s, a) => s + a.usesSold, 0) },
+    totals: { burned: burned.toString(), uses: agents.reduce((s, a) => s + a.usesSold, 0) },
   };
 }
 

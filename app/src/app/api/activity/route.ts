@@ -5,10 +5,10 @@ import { json, route } from "@/lib/server/http";
 export const dynamic = "force-dynamic";
 
 const deployed = parseAbiItem(
-  "event AgentDeployed(uint256 indexed agentId, address indexed creator, string name, uint256 pricePerUseWei, bytes32 configHash, string metadataURI, uint256 tokenPaid, uint256 tokenBurned)"
+  "event AgentDeployed(uint256 indexed agentId, address indexed creator, string name, uint256 pricePerUseWei, bytes32 configHash, string metadataURI, uint256 sagePaid, uint256 sageBurned)"
 );
 const purchased = parseAbiItem(
-  "event UsesPurchased(address indexed user, uint256 indexed agentId, uint256 uses, uint256 tokenPaid, uint256 toCreator, uint256 burned, uint256 toTreasury)"
+  "event UsesPurchased(address indexed buyer, uint256 indexed agentId, uint256 uses, uint256 sageCost, uint256 toCreator, uint256 burned, uint256 toTreasury)"
 );
 const CHUNK = 400_000n;
 const MAX_CHUNKS = 12;
@@ -26,7 +26,7 @@ export const GET = route(async () => {
   if (!d) return json({ items: [] });
   if (cache && Date.now() - cache.at < 30_000) return json({ items: cache.items });
   const c = publicClient();
-  const head = await c.getBlockNumber();
+  const head = await c.getBlockNumber({ cacheTime: 0 });
   const start = BigInt(d.deployBlock ?? d.startBlock ?? 0);
   const items: Item[] = [];
   for (let to = head, i = 0; to >= start && i < MAX_CHUNKS && items.length < WANT; i++) {
@@ -36,9 +36,9 @@ export const GET = route(async () => {
       c.getLogs({ address: d.market, event: purchased, fromBlock: from, toBlock: to }),
     ]);
     for (const l of a)
-      items.push({ kind: "deployed", block: Number(l.blockNumber), tx: l.transactionHash, agentId: Number(l.args.agentId), who: l.args.creator!, name: l.args.name!, paid: String(l.args.tokenPaid), burned: String(l.args.tokenBurned) });
+      items.push({ kind: "deployed", block: Number(l.blockNumber), tx: l.transactionHash, agentId: Number(l.args.agentId), who: l.args.creator!, name: l.args.name!, paid: String(l.args.sagePaid), burned: String(l.args.sageBurned) });
     for (const l of b)
-      items.push({ kind: "purchased", block: Number(l.blockNumber), tx: l.transactionHash, agentId: Number(l.args.agentId), who: l.args.user!, uses: Number(l.args.uses), paid: String(l.args.tokenPaid), burned: String(l.args.burned) });
+      items.push({ kind: "purchased", block: Number(l.blockNumber), tx: l.transactionHash, agentId: Number(l.args.agentId), who: l.args.buyer!, uses: Number(l.args.uses), paid: String(l.args.sageCost), burned: String(l.args.burned) });
     to = from - 1n;
   }
   items.sort((x, y) => y.block - x.block);

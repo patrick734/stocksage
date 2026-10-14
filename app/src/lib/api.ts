@@ -31,7 +31,7 @@ export type Market = {
   tokenPerEth: string | null;
   priceFresh: boolean;
   deploymentFeeWei: string;
-  totals: { burned: string; toTreasury: string; uses: number };
+  totals: { burned: string; uses: number };
 };
 
 export type Quota =

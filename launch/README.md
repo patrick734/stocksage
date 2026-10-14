@@ -67,6 +67,5 @@ The dev wallet is exempt from the snipe tax either way.
 ## After launch
 
 The protocol is usually deployed before $SAGE exists. After the launch, run `./set-token.sh <token address>`
-from the repo root. It prepares the admin Safe's timelock transaction that sets $SAGE in `DrawdownRetire`,
-once and for good. Once $SAGE graduates on Pons, `./govern.sh register-pool` starts the buy-and-burn.
-See [docs/LAUNCH.md](../docs/LAUNCH.md).
+from the repo root. It sets $SAGE (once) in AgentRegistry and AgentMarket from the dev wallet and takes the first
+rate from the Pons pool. See [docs/LAUNCH.md](../docs/LAUNCH.md).

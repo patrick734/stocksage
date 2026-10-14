@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Proves on-chain that the deployment is wired correctly and the deployer holds no power. Read-only.
+# Publishes every StockSage contract's source on the explorer (Sourcify) and checks the deployment on-chain.
+# No key, no gas. Safe to run again.
 set -euo pipefail
 cd "$(dirname "$0")"
 [[ -d contracts/node_modules ]] || (cd contracts && npm ci --no-audit --no-fund)

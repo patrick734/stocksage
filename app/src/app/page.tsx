@@ -74,9 +74,10 @@ export default function Home() {
       <section className="wrap section trust">
         <h2>Rules in code, not promises</h2>
         <ul className="checks">
-          <li>The wallet that deployed StockSage holds no power: every change waits 48 hours in a public timelock.</li>
-          <li>The 60 / 30 / 10 split is a constant in the contract. No one can change it or move anyone&apos;s earnings.</li>
+          <li>Every purchase is split in the same transaction: 60% to the creator, 30% burned, 10% to the treasury. The market never holds funds.</li>
+          <li>No withdraw function: nobody can move a creator&apos;s earnings or anyone&apos;s tokens.</li>
           <li>Each agent&apos;s configuration is hashed on-chain, so anyone can check the agent you pay for is the one its creator deployed.</li>
+          <li>One owner wallet sets the {brand.token} rate, the fees and the treasury, and can pause. Your maximum cost on every purchase protects you if the rate changes.</li>
         </ul>
         <Link href="/safety">See the live checks →</Link>
       </section>

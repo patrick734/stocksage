@@ -4,19 +4,15 @@
 
 | Role | Holder | Can | Cannot |
 |---|---|---|---|
-| Admin | OpenZeppelin `TimelockController`, 48h delay, proposer/executor = the admin wallet | set $SAGE once, set the deploy fee (≤ 1 ETH), set or reset the oracle price, tune oracle bounds within hard limits, unpause, unblock, unfreeze | change the 60/30/10 or 80/20 splits, move a creator's earnings, edit someone else's agent |
-| Guardian | Separate wallet | pause deploys and sales, freeze the price, block an agent from sale | unpause, unfreeze, unblock, move funds |
-| Keeper | Hot wallet (key only in GitHub secrets) | push the price, ±10% per push, once per 10 minutes | anything else |
-| Deployer | Dev wallet | nothing after deployment | anything |
+| Owner | The dev wallet (two-step transfer) | set $SAGE once per contract, set the rate, the deployment fee and its burn share, the purchase split, the treasury and the oracle; pause and unpause; deploy agents for free before $SAGE is set | move a creator's earnings or anyone's tokens, edit someone else's agent |
+| Creator | Whoever deployed an agent | change that agent's price, configuration and on/off switch | anything else |
 
-The treasury is the timelock itself, so treasury funds move only by a public proposal that waits 48 hours.
-
-### Oracle
-
-A pool's spot price can be moved for free inside one transaction, so purchases never read it. The keeper reads
-the Pons pool three times 15 seconds apart, takes the median and pushes it, bounded by the contract's step limit.
-A compromised keeper can move the price at most 10% per 10 minutes, and the guardian can freeze it. Buyers always
-pass a maximum cost, so a price change between quote and transaction cannot overcharge them.
+- Changes take effect at once: there is no timelock. The owner wallet is the main trust assumption.
+- Every purchase and deployment pays out in the same transaction, straight from the payer: creator share to the
+  creator, burn share to `0x…dEaD`, the rest to the treasury. The contracts never hold funds and have no withdraw
+  function.
+- The rate (`SageOracle.sagePerEth`) is set by hand. Buyers pass a maximum cost and creators a maximum fee, so a rate
+  change between the quote and the transaction can never charge more than they approved.
 
 ## Off-chain
 
@@ -33,5 +29,4 @@ The contracts have not had an independent audit. Keep the deploy fee and prices 
 
 ## Audit scope
 
-`contracts/src/AgentRegistry.sol`, `AgentMarket.sol`, `TokenOracle.sol`, `libraries/TokenBurn.sol`,
-`governance/GovernanceChecks.sol`.
+`contracts/src/SageOracle.sol`, `SageQuote.sol`, `AgentRegistry.sol`, `AgentMarket.sol`.

@@ -7,10 +7,9 @@ const RPC = ROBINHOOD_RPC_URL || "https://rpc.mainnet.chain.robinhood.com";
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
   solidity: {
-    version: "0.8.26",
+    version: "0.8.28",
     settings: {
       evmVersion: "cancun",
-      viaIR: true,
       optimizer: { enabled: true, runs: 200 },
     },
   },
@@ -27,8 +26,6 @@ module.exports = {
         forking: { url: RPC, ...(FORK_BLOCK && { blockNumber: Number(FORK_BLOCK) }) },
       }),
     },
-    // Local node on a separate port, used by the keeper bot's tests (keeper/README.md).
-    keeper: { url: "http://127.0.0.1:8547" },
     robinhood: {
       url: RPC,
       chainId: 4663,

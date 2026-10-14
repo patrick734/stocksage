@@ -44,7 +44,7 @@ export default function AgentPage({ params }: { params: { id: string } }) {
           </div>
         </div>
         {!agent.active && <p className="tx-status error">Its creator has switched this agent off.</p>}
-        {agent.blocked && <p className="tx-status error">This agent has been taken off sale by the guardian.</p>}
+        {agent.blocked && <p className="tx-status error">This agent has been taken off sale.</p>}
         <p className="lede">{c?.description}</p>
         {c?.specialization && (
           <p>

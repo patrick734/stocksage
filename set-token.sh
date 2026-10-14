@@ -1,19 +1,14 @@
 #!/usr/bin/env bash
-# After launching $SAGE on Pons: sets it (once) in AgentRegistry, with its first price from the Pons pool, through the 48h timelock.
-#   ./set-token.sh 0xTOKEN              check the token; write Safe files (Safe admin) or show the next command
-#   ./set-token.sh 0xTOKEN --schedule   plain-wallet admin: schedule it now (signs with ADMIN_ACCOUNT)
-#   ./set-token.sh 0xTOKEN --execute    plain-wallet admin: execute it after 48 hours
+# After launching $SAGE on Pons: sets it (once) in AgentRegistry and AgentMarket and sets the rate from its Pons pool. Sends from the
+# dev wallet (the owner).
+#   ./set-token.sh 0xTOKEN
 set -euo pipefail
 cd "$(dirname "$0")"
-[[ -n "${1:-}" ]] || { echo "usage: ./set-token.sh <\$SAGE token address> [--schedule|--execute]" >&2; exit 1; }
+[[ "${1:-}" =~ ^0x[0-9a-fA-F]{40}$ ]] || { echo "usage: ./set-token.sh <\$SAGE token address>" >&2; exit 1; }
 [[ -d contracts/node_modules ]] || (cd contracts && npm ci --no-audit --no-fund)
 eval "$(node tools/env.js)"
-TOKEN="$1"
-MODE="${2:-}"
+[[ -n "${DEPLOYER_ACCOUNT:-}" ]] || { echo "STOPPED: DEPLOYER_ACCOUNT is not set in launch.env" >&2; exit 1; }
 cd contracts
-if [[ "$MODE" == "--schedule" || "$MODE" == "--execute" ]]; then
-  [[ -n "${ADMIN_ACCOUNT:-}" ]] || { echo "STOPPED: set ADMIN_ACCOUNT in launch.env to the admin wallet's name (node tools/import-key.js <name>)" >&2; exit 1; }
-  GOVERN_SEND="${MODE#--}" KEY_ENV=ADMIN_PRIVATE_KEY node ../tools/with-key.js "$ADMIN_ACCOUNT" -- node scripts/govern.js set-token "$SAGE"
-else
-  node scripts/govern.js set-token "$SAGE"
-fi
+SEND=1 node ../tools/with-key.js "$DEPLOYER_ACCOUNT" -- node scripts/admin.js set-token "$1"
+node scripts/export-abis.js
+echo "Next: git add -A && git commit -m \"Plug in SAGE\" && git push"

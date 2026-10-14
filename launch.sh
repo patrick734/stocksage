@@ -19,19 +19,12 @@ command -v node >/dev/null || stop "Node.js is not installed. Get version 22 fro
 step "Settings"
 [[ -d contracts/node_modules ]] || (cd contracts && npm ci --no-audit --no-fund)
 eval "$(node tools/env.js)"
-echo "Loaded launch.env"
-for v in ADMIN_MULTISIG GUARDIAN_MULTISIG KEEPER_ADDRESS DEPLOYER_ACCOUNT; do
-  [[ -n "${!v:-}" ]] || stop "$v is not set in launch.env"
-done
+[[ -n "${DEPLOYER_ACCOUNT:-}" ]] || stop "DEPLOYER_ACCOUNT is not set in launch.env"
 DEPLOYER_ADDRESS=$(node tools/wallet.js address "$DEPLOYER_ACCOUNT")
-export DEPLOYER_ADDRESS
-echo "Dev wallet:   $DEPLOYER_ADDRESS ($DEPLOYER_ACCOUNT) deploys, then holds no power"
-echo "Admin:        $ADMIN_MULTISIG (proposes to the 48h timelock)"
-echo "Guardian:     $GUARDIAN_MULTISIG (can only pause, freeze the price, block an agent)"
-[[ "${ALLOW_PLAIN_WALLETS:-}" == "1" ]] && echo "              admin and guardian are plain wallets (ALLOW_PLAIN_WALLETS=1)"
-echo "Keeper:       $KEEPER_ADDRESS (pushes the \$SAGE price, bounded)"
-echo "\$SAGE:        set after the Pons launch with ./set-token.sh"
-[[ -n "${ROBINHOOD_RPC_URL:-}" ]] && echo "RPC:          private RPC from launch.env" || echo "RPC:          public Robinhood RPC (set ROBINHOOD_RPC_URL if it keeps dropping)"
+export DEPLOYER_ADDRESS TREASURY_ADDRESS
+echo "Dev wallet: $DEPLOYER_ADDRESS ($DEPLOYER_ACCOUNT) deploys and owns the contracts"
+echo "Treasury:   ${TREASURY_ADDRESS:-$DEPLOYER_ADDRESS}"
+echo "\$SAGE:      set after the Pons launch with ./set-token.sh"
 
 if [[ $REHEARSAL == 0 && -f contracts/deployments/robinhood.json && "${FORCE:-}" != "1" ]]; then
   stop "contracts/deployments/robinhood.json exists, so StockSage is already deployed. Use FORCE=1 only for a second, separate deployment."
@@ -52,7 +45,6 @@ if [[ $REHEARSAL == 1 ]]; then
     rm -f deployments/fork.json
     stop "The rehearsal failed (see above). A dropped connection shows up here too: set ROBINHOOD_RPC_URL to a private RPC and run again."
   fi
-  [[ -f deployments/fork.json ]] || stop "The rehearsal ended without writing its record, so it did not complete. Run again."
   rm -f deployments/fork.json deployments/hardhat.json
   printf '\nREHEARSAL PASSED. Nothing was sent. Deploy for real with: ./launch.sh\n'
   exit 0
@@ -67,19 +59,22 @@ if ! node ../tools/with-key.js "$DEPLOYER_ACCOUNT" -- npx hardhat run scripts/de
     node scripts/export-abis.js
     stop "StockSage IS deployed (deployments/robinhood.json); only the checks after it failed. Do not deploy again: run ./verify.sh."
   fi
-  stop "The deploy did not finish (see above). Contracts from a half-finished attempt hold nothing and are never listed by the app; once the cause is fixed, run ./launch.sh again for a full fresh set."
+  stop "The deploy did not finish (see above). Fix the cause and run ./launch.sh again."
 fi
 
 step "Publishing addresses to the app"
 node scripts/export-abis.js
 
+step "Publishing source on the explorer (Sourcify)"
+sleep 15
+npx hardhat run scripts/verify.js --network robinhood || echo "Not everything is verified yet: run ./verify.sh in a few minutes."
+
 step "Deployed"
-cat <<'EOF'
-Addresses: contracts/deployments/robinhood.json (also in abis/robinhood.json and the app)
+cat <<'EOT'
+Addresses: contracts/deployments/robinhood.json
 
 Next:
-  1. ./verify.sh                                   (post the output: proof the deployer holds nothing)
-  2. git add -A && git commit -m "Mainnet deployment" && git push
-  3. Vercel: import the repo, Root Directory "app", add Upstash Redis and the variables in docs/LAUNCH.md
-  4. Launch $SAGE on Pons from the dev wallet, then: ./set-token.sh <token address> --schedule
-EOF
+  1. git add -A && git commit -m "Mainnet deployment" && git push
+  2. Vercel: import the repo, Root Directory "app", add Upstash Redis and the variables in docs/LAUNCH.md
+  3. Launch $SAGE on Pons from the dev wallet (./launch-token.sh or ponsfamily.com), then: ./set-token.sh <token address>
+EOT

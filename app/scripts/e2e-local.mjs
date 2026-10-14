@@ -81,7 +81,8 @@ const cfg = { name: "E2E Desk", description: "Test agent.", specialization: "", 
 const saved = (await jsonCall("/api/configs", { method: "POST", body: { config: cfg } })).body;
 const served = await (await call(`/api/configs/${saved.hash}`)).text();
 check(saved.hash && JSON.parse(served).name === "E2E Desk", `config stored at ${saved.metadataURI}`);
-const fee = await pub.readContract({ address: d.registry, abi: reg, functionName: "deploymentFeeToken" });
+const feeWei = await pub.readContract({ address: d.registry, abi: reg, functionName: "deploymentFeeWei" });
+const fee = await pub.readContract({ address: d.registry, abi: reg, functionName: "quoteSage", args: [feeWei] });
 await tx({ address: d.token, abi: erc20Abi, functionName: "approve", args: [d.registry, fee] });
 const dep = await tx({ address: d.registry, abi: reg, functionName: "deployAgent", args: ["E2E Desk", saved.metadataURI, saved.hash, parseEther("0.0001"), fee] });
 const ev = parseEventLogs({ abi: reg, logs: dep.logs, eventName: "AgentDeployed" })[0];
@@ -95,7 +96,7 @@ check(mine?.config?.instructions === "Answer briefly.", "new agent listed with i
 const act = (await jsonCall("/api/activity")).body;
 check(act.items.some((i) => i.kind === "deployed" && i.agentId === 6) && act.items.some((i) => i.kind === "purchased"), `activity shows ${act.items.length} events`);
 const safety = (await jsonCall("/api/safety")).body;
-check(safety.checks.length === 7 && safety.checks.every((c) => c.ok), `safety: ${safety.checks.filter((c) => c.ok).length}/${safety.checks.length} checks pass`);
+check(safety.checks.length === 6 && safety.checks.every((c) => c.ok), `safety: ${safety.checks.filter((c) => c.ok).length}/${safety.checks.length} checks pass`);
 const log = readFileSync(process.env.MOCK_LOG, "utf8").trim().split("\n").map((l) => JSON.parse(l));
 if (OPENAI) {
   const first = log[0];

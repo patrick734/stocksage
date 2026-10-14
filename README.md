@@ -3,39 +3,36 @@
 An open market for AI agents on Robinhood Chain, paid in **$SAGE**.
 
 1. **Creators deploy agents.** An agent is a purpose, a personality and instructions. On-chain it is its creator,
-   its price per use (set in ETH) and the hash of its configuration. Deploying costs a fee in $SAGE (0.001 ETH worth
+   its price per use (set in ETH) and the hash of its configuration. Deploying costs a fee in $SAGE (0.005 ETH worth
    at launch): **80% burned**, 20% to the treasury.
-2. **Users pay per use** in $SAGE, at the creator's ETH price converted at the oracle price. One use is one reply.
+2. **Users pay per use** in $SAGE, at the creator's ETH price converted at the oracle rate. One use is one reply.
 3. **Every payment is split on-chain, in the same transaction: 60% to the creator, 30% burned, 10% to the
-   treasury.** The split is a constant in the contract.
+   treasury.**
 
 Sage, the flagship agent, is free for a few messages a day.
 
 ## Layout
 
 ```
-contracts/   AgentRegistry, AgentMarket, TokenOracle + 48h timelock (Hardhat, 19 unit tests)
+contracts/   SageOracle, AgentRegistry, AgentMarket (Hardhat, 11 unit tests)
 app/         Next.js site and backend: marketplace, agent chat, create, dashboard, activity, safety
-keeper/      Pushes the $SAGE price to TokenOracle from the Pons pool (GitHub Actions, every 15 min)
 launch/      Launches $SAGE on the Pons launchpad from the dev wallet
-tools/       Encrypted wallet keystores, keeper secret, launch.env loader
+tools/       Encrypted wallet keystores, launch.env loader
 brand/       X profile photo and banner
-abis/        ABIs and, after deploying, the mainnet addresses
+abis/        ABIs and, after deploying, the mainnet addresses (abis/v1: the first contracts)
 ```
 
 ## Contracts
 
 | Contract | What it does | Who controls what |
 |---|---|---|
-| `AgentRegistry` | Agents: `deployAgent`, `updateAgent`, `setPrice`, `setActive`, `setName`, `getAgent`, `quoteToken` | Only an agent's creator changes it. The timelock sets $SAGE once and the deploy fee (cap 1 ETH). The guardian can pause deploys and block an agent from sale. |
-| `AgentMarket` | `purchaseUses(agentId, uses, maxTokenCost)`, `usesPurchased(user, agentId)`, per-agent sold / earned / burned | The guardian can pause sales; only the timelock unpauses. No function moves anyone's funds. |
-| `TokenOracle` | `tokenPerEth()`: $SAGE per 1 ETH | The keeper pushes the price, at most 10% per push, once per 10 minutes. Older than 24h means no sales. The guardian can freeze it; the timelock sets the first price. |
-| `TimelockController` | Admin of everything, and the treasury | OpenZeppelin, 48h delay. |
+| `AgentRegistry` | Agents: `deployAgent`, `updateAgent`, `setPrice`, `setActive`, `getAgent`, `agentsOf`, `quoteSage` | Only an agent's creator changes it. The owner sets $SAGE once, the deployment fee and its burn share, the oracle and the treasury, and can pause. Before $SAGE is set only the owner deploys agents, for free. |
+| `AgentMarket` | `purchaseUses(agentId, uses, maxSageCost)`, `quoteUses`, `usesPurchased(buyer, agentId)`, per-agent sold / earned / burned | The owner sets $SAGE once, the split (`setSplit`), the oracle and the treasury, and can pause. No function moves anyone's funds. |
+| `SageOracle` | `sagePerEth()`: $SAGE per 1 ETH | The owner sets it with `setRate`. |
 
-- Every contract checks in its constructor that its admin is a 48h timelock the deployer cannot use. All settings
-  are constructor arguments, so the dev wallet that deploys never holds a role. `./verify.sh` proves it on-chain.
-- The oracle never reads the pool price at purchase time, because that can be moved inside one transaction. The
-  keeper pushes a bounded median instead, and buyers pass a maximum cost.
+- One owner wallet (the dev wallet, two-step transfer) runs all three. Changes apply at once; buyers and creators
+  sign a maximum cost, so a rate change cannot overcharge them. `./verify.sh` checks the wiring on-chain.
+- Burns go to `0x…dEaD`. Every payment goes straight from the payer to the creator, the burn address and the treasury.
 - Each agent's configuration is served at its `metadataURI`; its keccak256 is the on-chain `configHash`. The app
   re-hashes it in the browser ("Verify").
 
@@ -67,8 +64,8 @@ NEXT_PUBLIC_ENABLE_LOCAL=1 npm run dev
 npm run e2e -- http://localhost:3000
 ```
 
-If `binaries.soliditylang.org` is unreachable, install `solc@0.8.26` from npm and set `SOLCJS_PATH` to its
-`soljson.js`.
+If `binaries.soliditylang.org` is unreachable, set `LOCAL_SOLC` to a native solc 0.8.28 binary, or install
+`solc@0.8.28` from npm and set `SOLCJS_PATH` to its `soljson.js`.
 
 ## License
 

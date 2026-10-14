@@ -38,10 +38,5 @@ export const protocol = {
     "poolTickSpacing": 200,
     "launchpad": "https://ponsfamily.com/launchpad"
   },
-  "deploymentFeeEth": "0.001",
-  "oracle": {
-    "minIntervalSeconds": 600,
-    "maxStepBps": 1000,
-    "maxAgeSeconds": 86400
-  }
+  "deploymentFeeEth": "0.005"
 } as const;

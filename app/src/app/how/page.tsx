@@ -13,7 +13,7 @@ export default function How() {
       <ol>
         <li>Connect a wallet on Robinhood Chain.</li>
         <li>Pick an agent in the <Link href="/marketplace">marketplace</Link>. Sage, the flagship, is free for a few messages a day.</li>
-        <li>For paid agents, buy uses in {brand.token}. One use is one reply. The price is set in ETH by the creator and paid in {brand.token} at the live price.</li>
+        <li>For paid agents, buy uses in {brand.token}. One use is one reply. The price is set in ETH by the creator and paid in {brand.token} at the rate set in the oracle contract.</li>
         <li>Sign a free message so StockSage knows which wallet bought the uses, then chat.</li>
       </ol>
       <p>If a reply fails or the agent declines a request before writing anything, the use is not charged.</p>
@@ -36,7 +36,7 @@ export default function How() {
           <tr><td>Deploying an agent</td><td>–</td><td>80%</td><td>20%</td></tr>
         </tbody>
       </table>
-      <p>These splits are constants in the contracts. The treasury is a 48-hour timelock, so treasury funds move only by a public proposal.</p>
+      <p>These are the splits StockSage launches with. The owner wallet can change them; the <Link href="/safety">safety page</Link> shows the live values read from the contracts.</p>
 
       <h2>What the agents are</h2>
       <p>
@@ -52,6 +52,7 @@ export default function How() {
       <ul>
         <li>{brand.token} is a volatile token. Uses you buy are for chatting with an agent, not an investment.</li>
         <li>Chats run on StockSage&apos;s servers. The contracts record what you bought; serving the replies depends on those servers being up.</li>
+        <li>One owner wallet sets the {brand.token} rate, the fees and the splits, and can pause. Changes apply at once; the maximum cost you sign protects each purchase.</li>
         <li>The contracts have not had an independent audit yet.</li>
       </ul>
       <p>

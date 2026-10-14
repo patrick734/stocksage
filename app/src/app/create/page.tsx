@@ -24,7 +24,7 @@ export default function CreateAgent() {
   const tx = useTx();
   const [cfg, setCfg] = useState<AgentConfig>(EMPTY);
   const [price, setPrice] = useState("0.0001");
-  const fee = useReadContract({ address: deployment?.registry, abi: registryAbi, chainId, functionName: "deploymentFeeToken", query: { enabled: Boolean(deployment && market?.token) } });
+  const fee = useReadContract({ address: deployment?.registry, abi: registryAbi, chainId, functionName: "quoteSage", args: [BigInt(market?.deploymentFeeWei ?? "0")], query: { enabled: Boolean(deployment && market?.token) } });
 
   const set = <K extends keyof AgentConfig>(k: K, v: AgentConfig[K]) => setCfg((c) => ({ ...c, [k]: v }));
   const trimmed = Object.fromEntries(Object.entries(cfg).map(([k, v]) => [k, typeof v === "string" ? v.trim() : v]));

@@ -95,7 +95,7 @@ function MyAgent({ agent, onChange }: { agent: Agent; onChange: () => void }) {
         <AgentAvatar agent={agent} />
         <div>
           <h3><Link href={`/agent/${agent.id}`}>{agent.name}</Link></h3>
-          <PriceLabel agent={agent} /> · <span className="muted small">{agent.active ? "On sale" : "Switched off"}{agent.blocked ? " · blocked by the guardian" : ""}</span>
+          <PriceLabel agent={agent} /> · <span className="muted small">{agent.active ? "On sale" : "Switched off"}{agent.blocked ? " · taken off sale" : ""}</span>
         </div>
       </div>
       <dl className="kv">
